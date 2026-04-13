@@ -3,7 +3,7 @@ use std::sync::atomic::{AtomicU8, Ordering};
 use std::sync::OnceLock;
 use std::thread;
 
-use arti_client::{InertTorClient, TorClient, TorClientConfig};
+use arti_client::{TorClient, TorClientConfig};
 use tor_rtcompat::PreferredRuntime;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
@@ -51,7 +51,7 @@ pub extern "C" fn arti_bootstrap() -> u8 {
             let cfg = TorClientConfig::default();
             let builder = TorClient::builder().config(cfg);
 
-            let client: InertTorClient<PreferredRuntime> = match builder.create_unbootstrapped() {
+            let client: TorClient<PreferredRuntime> = match builder.create_unbootstrapped() {
                 Ok(c) => c,
                 Err(_) => {
                     TOR_STATE.store(0, Ordering::SeqCst);

@@ -22,8 +22,7 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: Add Rust iOS targets
-        run: |
-          rustup target add aarch64-apple-ios || true
+        run: rustup target add aarch64-apple-ios
 
       - name: Flutter pub get
         run: flutter pub get
@@ -35,28 +34,36 @@ jobs:
             mkdir -p ios/libs
             cp rust_core/target/aarch64-apple-ios/release/librust_core.a ios/libs/librust_core.a
           else
-            echo "rust_core/Cargo.toml not found - skipping native build"
+            echo "Error: rust_core/Cargo.toml not found!"
+            exit 1
           fi
 
-      - name: Build iOS (no codesign)
-        run: flutter build ios --release --no-codesign
+      - name: Build iOS (No CodeSign)
+        run: |
+          flutter build ios --release --no-codesign \
+            --extra-gen-snapshot-options="--no-codesign" \
+            --extra-front-end-options="--no-codesign"
+        env:
+          EXPANDED_CODE_SIGN_IDENTITY: ""
+          CODE_SIGNING_REQUIRED: "NO"
+          CODE_SIGNING_ALLOWED: "NO"
 
       - name: Package IPA (unsigned)
         run: |
-          APP_DIR="build/ios/iphoneos/Runner.app"
-          if [ ! -d "$APP_DIR" ]; then
-            echo "Runner.app not found at $APP_DIR"
-            ls -la build/ios/iphoneos || true
+          APP_PATH=$(find build/ios/iphoneos -name "*.app" | head -n 1)
+          if [ -z "$APP_PATH" ]; then
+            echo "Runner.app not found!"
+            ls -R build/ios/iphoneos
             exit 1
           fi
-          rm -rf Payload FlipSwitch.ipa
+          
+          echo "Found app at: $APP_PATH"
           mkdir -p Payload
-          cp -R "$APP_DIR" "Payload/FlipSwitch.app"
-          /usr/bin/zip -r -y "FlipSwitch.ipa" "Payload"
+          cp -R "$APP_PATH" Payload/
+          zip -r FlipSwitch.ipa Payload
 
       - name: Upload IPA artifact
         uses: actions/upload-artifact@v4
         with:
           name: FlipSwitch-unsigned-ipa
           path: FlipSwitch.ipa
-

@@ -51,7 +51,7 @@ pub extern "C" fn arti_bootstrap() -> u8 {
             let cfg = TorClientConfig::default();
             let builder = TorClient::builder().config(cfg);
 
-            let client: TorClient<PreferredRuntime> = match builder.create_unbootstrapped().await {
+            let client: TorClient<PreferredRuntime> = match builder.create_unbootstrapped() {
                 Ok(c) => c,
                 Err(_) => {
                     TOR_STATE.store(0, Ordering::SeqCst);

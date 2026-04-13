@@ -1,0 +1,43 @@
+name: build-ios
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  ios:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Add Rust iOS targets
+        run: |
+          rustup target add aarch64-apple-ios || true
+
+      - name: Flutter pub get
+        run: flutter pub get
+
+      - name: Build rust_core (iOS)
+        run: |
+          if [ -f rust_core/Cargo.toml ]; then
+            cargo build --release --manifest-path rust_core/Cargo.toml --target aarch64-apple-ios
+            mkdir -p ios/libs
+            cp rust_core/target/aarch64-apple-ios/release/librust_core.a ios/libs/librust_core.a
+          else
+            echo "rust_core/Cargo.toml not found - skipping native build"
+          fi
+
+      - name: Build iOS (no codesign)
+        run: flutter build ios --no-codesign
+

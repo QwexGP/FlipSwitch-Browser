@@ -1,0 +1,19 @@
+[package]
+name = "rust_core"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "rust_core"
+crate-type = ["staticlib", "cdylib"]
+
+[profile.release]
+lto = true
+codegen-units = 1
+panic = "abort"
+
+[dependencies]
+arti-client = { version = "0.26", features = ["static", "tokio", "native-tls"] }
+tokio = { version = "1", features = ["full"] }
+allo-isolate = "0.1"
+

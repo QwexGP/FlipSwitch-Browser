@@ -4,6 +4,7 @@ use std::sync::OnceLock;
 use std::thread;
 
 use arti_client::{TorClient, TorClientConfig};
+use tor_rtcompat::PreferredRuntime;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 
@@ -109,7 +110,7 @@ pub extern "C" fn is_tor_ready() -> u8 {
     arti_is_ready()
 }
 
-async fn handle_socks5(mut sock: TcpStream, tor: TorClient<tokio::runtime::Handle>) -> std::io::Result<()> {
+async fn handle_socks5(mut sock: TcpStream, tor: TorClient<PreferredRuntime>) -> std::io::Result<()> {
     // ---- handshake ----
     // client: VER, NMETHODS, METHODS...
     let ver = sock.read_u8().await?;

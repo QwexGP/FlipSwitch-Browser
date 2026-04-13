@@ -13,7 +13,8 @@ codegen-units = 1
 panic = "abort"
 
 [dependencies]
-arti-client = { version = "0.26", features = ["static", "tokio", "native-tls"] }
+arti-client = { version = "0.26", features = ["static", "tokio", "native-tls", "full"] }
 tokio = { version = "1", features = ["full"] }
 allo-isolate = "0.1"
+tor-rtcompat = { version = "0.26", features = ["tokio", "native-tls"] }
 

@@ -39,5 +39,24 @@ jobs:
           fi
 
       - name: Build iOS (no codesign)
-        run: flutter build ios --no-codesign
+        run: flutter build ios --release --no-codesign
+
+      - name: Package IPA (unsigned)
+        run: |
+          APP_DIR="build/ios/iphoneos/Runner.app"
+          if [ ! -d "$APP_DIR" ]; then
+            echo "Runner.app not found at $APP_DIR"
+            ls -la build/ios/iphoneos || true
+            exit 1
+          fi
+          rm -rf Payload FlipSwitch.ipa
+          mkdir -p Payload
+          cp -R "$APP_DIR" "Payload/FlipSwitch.app"
+          /usr/bin/zip -r -y "FlipSwitch.ipa" "Payload"
+
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: FlipSwitch-unsigned-ipa
+          path: FlipSwitch.ipa
 

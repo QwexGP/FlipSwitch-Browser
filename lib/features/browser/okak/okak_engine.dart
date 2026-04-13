@@ -51,14 +51,6 @@ class _OkakEngineState extends State<OkakEngine> {
   }
 
   Future<void> _applyNetworkMode() async {
-    // Data isolation:
-    // - iOS: `incognito:true` uses WKWebsiteDataStore.nonPersistent (isolated).
-    // - Android: true isolation isn't supported by the native WebView; we still
-    //   enable `incognito` to avoid persistence and reduce cross-mode leakage.
-    //
-    // Tor proxy:
-    // - Android: use WebView ProxyController if the feature is supported.
-    // - Other platforms: keep settings consistent (actual proxying is platform-dependent).
     final isDark = widget.mode == BrowserMode.dark;
 
     if (kIsWeb) return;
@@ -73,10 +65,11 @@ class _OkakEngineState extends State<OkakEngine> {
           await proxyController.clearProxyOverride();
           await proxyController.setProxyOverride(
             settings: ProxySettings(
-              proxyRules: const [
+              // Убрали const здесь, так как ProxyRule не является константным конструктором
+              proxyRules: [
                 ProxyRule(url: 'socks5://127.0.0.1:9050'),
               ],
-              bypassRules: const [],
+              bypassRules: [],
             ),
           );
         } else {
@@ -90,7 +83,6 @@ class _OkakEngineState extends State<OkakEngine> {
     try {
       if (!_controllerReady.isCompleted) return;
       await _controllerReady.future;
-      // Re-apply injection ASAP and reload.
       await _applyInjections();
       await _controller?.reload();
     } catch (_) {}
@@ -100,7 +92,6 @@ class _OkakEngineState extends State<OkakEngine> {
     final c = _controller;
     if (c == null) return;
 
-    // Primary fingerprint injection (navigator/screen/canvas).
     final fp = buildFingerprintInjection(widget.profile);
     await c.evaluateJavascript(source: fp);
   }
@@ -118,7 +109,6 @@ class _OkakEngineState extends State<OkakEngine> {
       mediaPlaybackRequiresUserGesture: false,
       incognito: isDark,
       cacheEnabled: !isDark,
-      // Helps on older GPUs/drivers; webview still uses platform rendering.
       hardwareAcceleration: false,
     );
 
@@ -145,4 +135,3 @@ class _OkakEngineState extends State<OkakEngine> {
     );
   }
 }
-

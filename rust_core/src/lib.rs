@@ -40,47 +40,32 @@ pub extern "C" fn arti_bootstrap() -> u8 {
 
         rt.block_on(async {
             let cfg = TorClientConfig::default();
-            let builder = TorClient::builder().config(cfg);
             
-            // Шаг 1: Создаем unbootstrapped клиент
-            let unbootstrapped = match builder.create_unbootstrapped() {
-                Ok(c) => c,
-                Err(_) => {
+            // Пытаемся создать и запустить клиент Tor
+            let client_res = async {
+                let unbootstrapped = TorClient::builder().config(cfg).create_unbootstrapped()?;
+                let bootstrapped = unbootstrapped.bootstrap().await?;
+                Ok::<TorClient<PreferredRuntime>, arti_client::Error>(bootstrapped)
+            }.await;
+
+            if let Ok(final_client) = client_res {
+                // Пытаемся запустить TCP Listener для SOCKS5
+                if let Ok(listener) = TcpListener::bind("127.0.0.1:9050").await {
+                    TOR_STATE.store(2, Ordering::SeqCst);
+
+                    loop {
+                        if let Ok((sock, _)) = listener.accept().await {
+                            let client_clone = final_client.clone();
+                            tokio::spawn(async move {
+                                let _ = handle_socks5(sock, client_clone).await;
+                            });
+                        }
+                    }
+                } else {
                     TOR_STATE.store(0, Ordering::SeqCst);
-                    return; // Возвращает (), компилятор доволен
                 }
-            };
-
-            // Шаг 2: Запускаем bootstrap
-            let final_client = match unbootstrapped.bootstrap().await {
-                Ok(c) => c,
-                Err(_) => {
-                    TOR_STATE.store(0, Ordering::SeqCst);
-                    return; // Возвращает (), типы совпадают
-                }
-            };
-
-            // Шаг 3: Настраиваем прокси-сервер
-            let listener = match TcpListener::bind("127.0.0.1:9050").await {
-                Ok(l) => l,
-                Err(_) => {
-                    TOR_STATE.store(0, Ordering::SeqCst);
-                    return;
-                }
-            };
-
-            TOR_STATE.store(2, Ordering::SeqCst);
-
-            loop {
-                let (sock, _) = match listener.accept().await {
-                    Ok(v) => v,
-                    Err(_) => continue,
-                };
-                
-                let client_clone = final_client.clone();
-                tokio::spawn(async move {
-                    let _ = handle_socks5(sock, client_clone).await;
-                });
+            } else {
+                TOR_STATE.store(0, Ordering::SeqCst);
             }
         });
     });

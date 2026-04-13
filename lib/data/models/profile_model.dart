@@ -1,126 +1,60 @@
 import 'package:hive/hive.dart';
 
-/// Primary persisted identity for fingerprinting.
-///
-/// NOTE: Adapter is implemented manually to keep the project compiling
-/// without build_runner codegen.
+part 'profile_model.g.dart';
+
+@HiveType(typeId: 0)
 class ProfileModel extends HiveObject {
   ProfileModel({
-    required this.id,
     required this.name,
     required this.userAgent,
     required this.platform,
+    required this.vendor,
+    required this.screenWidth,
+    required this.screenHeight,
     required this.hardwareConcurrency,
     required this.deviceMemory,
-    required this.canvasSeed,
-    required this.buildProps,
-    required this.screen,
-    required this.avatarGradientA,
-    required this.avatarGradientB,
+    required this.colorDepth,
   });
 
-  /// Stable key in Hive (also used as UI selection id).
-  final String id;
+  @HiveField(0)
+  String name;
 
-  final String name;
-  final String userAgent;
+  @HiveField(1)
+  String userAgent;
 
-  /// What JS sees in `navigator.platform`.
-  final String platform;
+  @HiveField(2)
+  String platform;
 
-  final int hardwareConcurrency;
-  final int deviceMemory;
+  @HiveField(3)
+  String vendor;
 
-  /// Seed for deterministic canvas noise.
-  final int canvasSeed;
+  @HiveField(4)
+  int screenWidth;
 
-  /// Synthetic "build properties" used by injection layer.
-  /// Keep keys stable (e.g. BRAND/MODEL/DEVICE/PRODUCT/MANUFACTURER).
-  final Map<String, String> buildProps;
+  @HiveField(5)
+  int screenHeight;
 
-  final ScreenModel screen;
+  @HiveField(6)
+  int hardwareConcurrency;
 
-  /// UI-only (stored to keep profile avatars stable).
-  final int avatarGradientA;
-  final int avatarGradientB;
-}
+  @HiveField(7)
+  int deviceMemory;
 
-class ScreenModel {
-  const ScreenModel({
-    required this.width,
-    required this.height,
-    required this.devicePixelRatio,
-  });
+  @HiveField(8)
+  int colorDepth;
 
-  final int width;
-  final int height;
-  final double devicePixelRatio;
-}
-
-class ProfileModelAdapter extends TypeAdapter<ProfileModel> {
-  @override
-  final int typeId = 0;
-
-  @override
-  ProfileModel read(BinaryReader reader) {
-    final numOfFields = reader.readByte();
-    final fields = <int, dynamic>{};
-    for (var i = 0; i < numOfFields; i++) {
-      fields[reader.readByte()] = reader.read();
-    }
-
-    final screenWidth = (fields[8] as int?) ?? 1080;
-    final screenHeight = (fields[9] as int?) ?? 2400;
-    final dpr = (fields[10] as double?) ?? 3.0;
-
+  static ProfileModel defaultProfile() {
     return ProfileModel(
-      id: (fields[0] as String?) ?? 'default',
-      name: (fields[1] as String?) ?? 'Default',
-      userAgent: (fields[2] as String?) ?? '',
-      platform: (fields[3] as String?) ?? '',
-      hardwareConcurrency: (fields[4] as int?) ?? 4,
-      deviceMemory: (fields[5] as int?) ?? 4,
-      canvasSeed: (fields[6] as int?) ?? 1,
-      buildProps: (fields[7] as Map?)?.cast<String, String>() ?? const {},
-      screen: ScreenModel(
-        width: screenWidth,
-        height: screenHeight,
-        devicePixelRatio: dpr,
-      ),
-      avatarGradientA: (fields[11] as int?) ?? 0xFF1DA1F2,
-      avatarGradientB: (fields[12] as int?) ?? 0xFF7C4DFF,
+      name: 'Windows',
+      userAgent:
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36',
+      platform: 'Win32',
+      vendor: 'Google Inc.',
+      screenWidth: 1920,
+      screenHeight: 1080,
+      hardwareConcurrency: 8,
+      deviceMemory: 16,
+      colorDepth: 24,
     );
-  }
-
-  @override
-  void write(BinaryWriter writer, ProfileModel obj) {
-    writer
-      ..writeByte(13)
-      ..writeByte(0)
-      ..write(obj.id)
-      ..writeByte(1)
-      ..write(obj.name)
-      ..writeByte(2)
-      ..write(obj.userAgent)
-      ..writeByte(3)
-      ..write(obj.platform)
-      ..writeByte(4)
-      ..write(obj.hardwareConcurrency)
-      ..writeByte(5)
-      ..write(obj.deviceMemory)
-      ..writeByte(6)
-      ..write(obj.canvasSeed)
-      ..writeByte(7)
-      ..write(obj.buildProps)
-      ..writeByte(8)
-      ..write(obj.screen.width)
-      ..writeByte(9)
-      ..write(obj.screen.height)
-      ..writeByte(10)
-      ..write(obj.screen.devicePixelRatio)
-      ..writeByte(11)
-      ..write(obj.avatarGradientA)
-      ..writeByte(12)
-      ..write(obj.avatarGradientB);
   }
 }

@@ -1,3 +1,54 @@
+part of 'profile_model.dart';
+
+class ProfileModelAdapter extends TypeAdapter<ProfileModel> {
+  @override
+  final int typeId = 0;
+
+  @override
+  ProfileModel read(BinaryReader reader) {
+    final numOfFields = reader.readByte();
+    final fields = <int, dynamic>{};
+    for (var i = 0; i < numOfFields; i++) {
+      fields[reader.readByte()] = reader.read();
+    }
+    return ProfileModel(
+      name: (fields[0] as String?) ?? 'Default',
+      userAgent: (fields[1] as String?) ?? '',
+      platform: (fields[2] as String?) ?? '',
+      vendor: (fields[3] as String?) ?? '',
+      screenWidth: (fields[4] as int?) ?? 1920,
+      screenHeight: (fields[5] as int?) ?? 1080,
+      hardwareConcurrency: (fields[6] as int?) ?? 4,
+      deviceMemory: (fields[7] as int?) ?? 4,
+      colorDepth: (fields[8] as int?) ?? 24,
+    );
+  }
+
+  @override
+  void write(BinaryWriter writer, ProfileModel obj) {
+    writer
+      ..writeByte(9)
+      ..writeByte(0)
+      ..write(obj.name)
+      ..writeByte(1)
+      ..write(obj.userAgent)
+      ..writeByte(2)
+      ..write(obj.platform)
+      ..writeByte(3)
+      ..write(obj.vendor)
+      ..writeByte(4)
+      ..write(obj.screenWidth)
+      ..writeByte(5)
+      ..write(obj.screenHeight)
+      ..writeByte(6)
+      ..write(obj.hardwareConcurrency)
+      ..writeByte(7)
+      ..write(obj.deviceMemory)
+      ..writeByte(8)
+      ..write(obj.colorDepth);
+  }
+}
+
 // GENERATED CODE - DO NOT MODIFY BY HAND
 
 part of 'profile_model.dart';

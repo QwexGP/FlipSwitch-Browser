@@ -1,11 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
+import 'package:hive/hive.dart';
 
-import '../../../data/models/settings_model.dart';
-import '../../../data/services/settings_manager.dart';
-import '../okak/engine_core.dart';
-import '../okak/tor/tor_status.dart';
+import '../../../data/models/profile_model.dart';
+import '../../../data/services/profile_manager.dart';
+import '../engine/flip_engine.dart';
 import 'settings_screen.dart';
 
 class BrowserHome extends StatefulWidget {
@@ -15,180 +14,274 @@ class BrowserHome extends StatefulWidget {
   State<BrowserHome> createState() => _BrowserHomeState();
 }
 
-class _BrowserHomeState extends State<BrowserHome> {
-  final TextEditingController address = TextEditingController(
-    text: 'https://check.torproject.org/',
-  );
-  String currentUrl = 'https://check.torproject.org/';
-  InAppWebViewController? controller;
-  String title = 'FlipSwitch';
+class _BrowserHomeState extends State<BrowserHome> with TickerProviderStateMixin {
+  static const Color bg = Color(0xFF000000);
+  static const Color accent = Color(0xFFBB86FC);
+  static const String mono = 'monospace';
+
+  TabController? _tabController;
+  final List<_TabData> _tabs = [
+    _TabData(id: 't0', url: 'https://check.torproject.org/'),
+  ];
+
+  String _activeProfileKey = 'p0';
+  final Map<String, InAppWebViewController?> _controllers = {};
+
+  late final TextEditingController _address = TextEditingController(text: _tabs.first.url);
+
+  @override
+  void initState() {
+    super.initState();
+    _ensureDefaultProfile();
+    _tabController = TabController(length: _tabs.length, vsync: this);
+    _tabController!.addListener(() {
+      if (_tabController!.indexIsChanging) return;
+      setState(() {
+        _address.text = _tabs[_tabController!.index].url;
+      });
+    });
+  }
+
+  Future<void> _ensureDefaultProfile() async {
+    final box = await ProfileManager.openProfilesBox();
+    if (box.isEmpty) {
+      await box.put('p0', ProfileModel.defaultProfile());
+    }
+    if (!box.containsKey(_activeProfileKey)) {
+      setState(() => _activeProfileKey = box.keys.first.toString());
+    }
+  }
 
   @override
   void dispose() {
-    address.dispose();
+    _tabController?.dispose();
+    _address.dispose();
     super.dispose();
   }
 
-  Future<void> _newIdentity() async {
-    final box = await SettingsManager.openBox();
-    final s = box.get(SettingsManager.key) ?? SettingsModel.defaults();
-    await box.put(SettingsManager.key, s.copyWith(identitySeed: s.identitySeed + 1));
-    await panicClearAndCloseTab(controller);
-    setState(() {});
+  InAppWebViewController? get _activeController {
+    final idx = _tabController?.index ?? 0;
+    final tabId = _tabs[idx].id;
+    return _controllers[tabId];
   }
 
   Future<void> _go() async {
-    final input = address.text.trim();
-    final resolved = await _resolveInputWithSettings(input);
-    address.text = resolved;
-    address.selection = TextSelection.fromPosition(TextPosition(offset: resolved.length));
-    setState(() => currentUrl = resolved);
+    final idx = _tabController?.index ?? 0;
+    final url = _normalizeInput(_address.text.trim());
+    setState(() {
+      _tabs[idx] = _tabs[idx].copyWith(url: url);
+      _address.text = url;
+    });
+    try {
+      await _activeController?.loadUrl(urlRequest: URLRequest(url: WebUri(url)));
+    } catch (_) {}
   }
 
-  Future<String> _resolveInputWithSettings(String input) async {
-    if (input.isEmpty) return currentUrl;
-
+  String _normalizeInput(String input) {
+    if (input.isEmpty) return 'about:blank';
     final lower = input.toLowerCase();
     final hasScheme = lower.startsWith('http://') || lower.startsWith('https://');
     final hasDot = lower.contains('.');
-    final looksLikeIpv4 =
-        RegExp(r'^(\d{1,3}\.){3}\d{1,3}(:\d+)?(\/.*)?$').hasMatch(lower);
-    final looksLikeHost =
-        lower == 'localhost' || lower.startsWith('localhost:') || lower.startsWith('localhost/');
+    if (!hasScheme && !hasDot) {
+      final q = Uri.encodeQueryComponent(input);
+      return 'https://duckduckgo.com/?q=$q';
+    }
+    return hasScheme ? input : 'https://$input';
+  }
 
-    final looksLikeUrl = hasScheme || hasDot || looksLikeIpv4 || looksLikeHost;
-    if (looksLikeUrl) return hasScheme ? input : 'https://$input';
+  Future<void> _back() async {
+    try {
+      await _activeController?.goBack();
+    } catch (_) {}
+  }
 
-    final box = await SettingsManager.openBox();
-    final s = box.get(SettingsManager.key) ?? SettingsModel.defaults();
-    final q = Uri.encodeQueryComponent(input);
-    final isTor = s.networkMode != NetworkMode.direct;
-    return isTor ? 'https://duckduckgo.com/?q=$q' : 'https://www.google.com/search?q=$q';
+  Future<void> _forward() async {
+    try {
+      await _activeController?.goForward();
+    } catch (_) {}
+  }
+
+  Future<void> _reload() async {
+    try {
+      await _activeController?.reload();
+    } catch (_) {}
+  }
+
+  Future<void> _newTab() async {
+    final nextId = 't${DateTime.now().microsecondsSinceEpoch}';
+    setState(() {
+      _tabs.add(_TabData(id: nextId, url: 'about:blank'));
+      _tabController?.dispose();
+      _tabController = TabController(length: _tabs.length, vsync: this);
+      _tabController!.index = _tabs.length - 1;
+    });
   }
 
   void _openSettings() {
     Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const SettingsScreen()),
+      MaterialPageRoute(
+        builder: (_) => SettingsScreen(profileKey: _activeProfileKey),
+      ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFF000000),
-      body: SafeArea(
-        child: Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(14, 14, 14, 10),
-              child: Row(
-                children: [
-                  _ShieldButton(onPressed: () => _showTorStatus(context)),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: _GlassAddressBar(
-                      controller: address,
-                      onGo: _go,
-                      onNewIdentity: _newIdentity,
+    return FutureBuilder(
+      future: ProfileManager.openProfilesBox(),
+      builder: (context, snap) {
+        if (!snap.hasData) {
+          return const Scaffold(body: Center(child: CircularProgressIndicator()));
+        }
+        final box = snap.data as Box<ProfileModel>;
+
+        final profiles = box.keys.map((k) => k.toString()).toList(growable: false);
+        if (profiles.isNotEmpty && !box.containsKey(_activeProfileKey)) {
+          _activeProfileKey = profiles.first;
+        }
+
+        return Scaffold(
+          backgroundColor: bg,
+          appBar: AppBar(
+            backgroundColor: bg,
+            elevation: 0,
+            title: Text('FlipSwitch', style: const TextStyle(fontFamily: mono)),
+            actions: [
+              IconButton(onPressed: _openSettings, icon: const Icon(Icons.menu), color: accent),
+            ],
+            bottom: PreferredSize(
+              preferredSize: const Size.fromHeight(40),
+              child: Container(
+                decoration: const BoxDecoration(
+                  border: Border(top: BorderSide(color: accent, width: 1)),
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: TabBar(
+                        controller: _tabController,
+                        isScrollable: true,
+                        indicatorColor: accent,
+                        labelColor: accent,
+                        unselectedLabelColor: Colors.white70,
+                        labelStyle: const TextStyle(fontFamily: mono),
+                        tabs: [
+                          for (final t in _tabs) Tab(text: t.id),
+                        ],
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 10),
-                  IconButton(
-                    onPressed: _openSettings,
-                    icon: const Icon(Icons.menu),
-                    color: Colors.white.withOpacity(0.92),
-                    tooltip: 'Настройки',
-                  ),
-                ],
+                    IconButton(
+                      onPressed: _newTab,
+                      icon: const Icon(Icons.add),
+                      color: accent,
+                      tooltip: 'Новая вкладка',
+                    )
+                  ],
+                ),
               ),
             ),
-            Expanded(
-              child: Stack(
-                children: [
-                  FlipEngine(
-                    initialUrl: currentUrl,
-                    onTitleChanged: (t) => setState(() => title = t),
-                    onControllerReady: (c) => controller = c,
-                  ),
-                  IgnorePointer(
-                    child: Align(
-                      alignment: Alignment.topCenter,
-                      child: Padding(
-                        padding: const EdgeInsets.only(top: 74),
-                        child: AnimatedOpacity(
-                          opacity: currentUrl.isEmpty ? 1 : 0,
-                          duration: const Duration(milliseconds: 220),
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const _FlipSwitchLogo(),
-                              const SizedBox(height: 10),
-                              Text(
-                                'FlipSwitch',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.w800,
-                                  fontSize: 20,
-                                  color: Colors.white.withOpacity(0.90),
-                                  fontFamily: 'monospace',
-                                ),
-                              ),
-                            ],
+          ),
+          body: Column(
+            children: [
+              Container(
+                height: 40,
+                decoration: const BoxDecoration(
+                  border: Border(bottom: BorderSide(color: accent, width: 1)),
+                ),
+                child: ListView.separated(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                  itemCount: profiles.length,
+                  separatorBuilder: (_, __) => const SizedBox(width: 10),
+                  itemBuilder: (context, i) {
+                    final key = profiles[i];
+                    final p = box.get(key);
+                    final selected = key == _activeProfileKey;
+                    return GestureDetector(
+                      onTap: () => setState(() => _activeProfileKey = key),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                        decoration: BoxDecoration(
+                          border: Border.all(color: accent, width: 1),
+                          color: selected ? accent.withOpacity(0.15) : Colors.transparent,
+                          borderRadius: BorderRadius.zero,
+                        ),
+                        child: Text(
+                          p?.name ?? key,
+                          style: TextStyle(
+                            fontFamily: mono,
+                            color: Colors.white.withOpacity(0.9),
+                            fontWeight: FontWeight.w700,
                           ),
                         ),
                       ),
-                    ),
-                  ),
-                ],
+                    );
+                  },
+                ),
               ),
-            ),
-          ],
-        ),
-      ),
-    ).animate().fadeIn(duration: 180.ms);
-  }
-
-  void _showTorStatus(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: const Color(0xFF0B0B0B),
-      builder: (context) {
-        return Padding(
-          padding: const EdgeInsets.all(16),
-          child: StreamBuilder(
-            stream: TorStatusController.instance.stream,
-            initialData: TorStatusController.instance.state,
-            builder: (context, snap) {
-              final s = snap.data ?? TorState.unavailable;
-              final (label, color) = switch (s) {
-                TorState.ready => ('Tor: ready', const Color(0xFF00FFA8)),
-                TorState.connecting => ('Tor: connecting', const Color(0xFF1DA1F2)),
-                TorState.unavailable => ('Tor: unavailable', Colors.orange),
-              };
-              return Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('Щит', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16, fontFamily: 'monospace')),
-                  const SizedBox(height: 10),
-                  Row(
-                    children: [
-                      Container(
-                        width: 10,
-                        height: 10,
-                        decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                decoration: const BoxDecoration(
+                  border: Border(bottom: BorderSide(color: accent, width: 1)),
+                ),
+                child: Row(
+                  children: [
+                    IconButton(onPressed: _back, icon: const Icon(Icons.arrow_back), color: accent),
+                    IconButton(onPressed: _forward, icon: const Icon(Icons.arrow_forward), color: accent),
+                    IconButton(onPressed: _reload, icon: const Icon(Icons.refresh), color: accent),
+                    IconButton(onPressed: () {}, icon: const Icon(Icons.shield), color: accent),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: TextField(
+                        controller: _address,
+                        style: const TextStyle(fontFamily: mono, color: Colors.white),
+                        decoration: const InputDecoration(
+                          isDense: true,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.zero,
+                            borderSide: BorderSide(color: accent, width: 1),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.zero,
+                            borderSide: BorderSide(color: accent, width: 1),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.zero,
+                            borderSide: BorderSide(color: accent, width: 1),
+                          ),
+                          contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                        ),
+                        onSubmitted: (_) => _go(),
                       ),
-                      const SizedBox(width: 10),
-                      Text(label, style: TextStyle(color: Colors.white.withOpacity(0.85), fontFamily: 'monospace')),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    'Управление отпечатком находится в настройках.',
-                    style: TextStyle(color: Colors.white.withOpacity(0.55), fontFamily: 'monospace'),
-                  ),
-                ],
-              );
-            },
+                    ),
+                    const SizedBox(width: 8),
+                    OutlinedButton(
+                      onPressed: _go,
+                      style: OutlinedButton.styleFrom(
+                        side: const BorderSide(color: accent, width: 1),
+                        shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+                        foregroundColor: Colors.white,
+                      ),
+                      child: const Text('GO', style: TextStyle(fontFamily: mono, fontWeight: FontWeight.w900)),
+                    )
+                  ],
+                ),
+              ),
+              Expanded(
+                child: TabBarView(
+                  controller: _tabController,
+                  children: [
+                    for (final tab in _tabs)
+                      FlipEngine(
+                        tabId: tab.id,
+                        initialUrl: tab.url,
+                        profileKey: _activeProfileKey,
+                        onControllerReady: (c) => _controllers[tab.id] = c,
+                      ),
+                  ],
+                ),
+              ),
+            ],
           ),
         );
       },
@@ -196,113 +289,10 @@ class _BrowserHomeState extends State<BrowserHome> {
   }
 }
 
-class _ShieldButton extends StatelessWidget {
-  const _ShieldButton({required this.onPressed});
-  final VoidCallback onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onPressed,
-      borderRadius: BorderRadius.circular(14),
-      child: Container(
-        width: 46,
-        height: 46,
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(14),
-          color: Colors.white.withOpacity(0.06),
-          border: Border.all(color: Colors.white.withOpacity(0.10)),
-        ),
-        child: const Icon(Icons.shield_outlined, color: Color(0xFFBB86FC)),
-      ),
-    );
-  }
-}
-
-class _GlassAddressBar extends StatelessWidget {
-  const _GlassAddressBar({
-    required this.controller,
-    required this.onGo,
-    required this.onNewIdentity,
-  });
-
-  final TextEditingController controller;
-  final VoidCallback onGo;
-  final VoidCallback onNewIdentity;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(18),
-        color: Colors.white.withOpacity(0.06),
-        border: Border.all(color: Colors.white.withOpacity(0.10)),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: TextField(
-              controller: controller,
-              keyboardType: TextInputType.url,
-              textInputAction: TextInputAction.go,
-              onSubmitted: (_) => onGo(),
-              style: const TextStyle(color: Colors.white, fontFamily: 'monospace'),
-              decoration: InputDecoration(
-                isDense: true,
-                border: InputBorder.none,
-                hintText: 'Введите адрес или запрос',
-                hintStyle: TextStyle(color: Colors.white54, fontFamily: 'monospace'),
-              ),
-            ),
-          ),
-          IconButton(
-            onPressed: onNewIdentity,
-            icon: const Icon(Icons.autorenew),
-            color: Colors.white.withOpacity(0.92),
-            tooltip: 'Новая личность',
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _FlipSwitchLogo extends StatelessWidget {
-  const _FlipSwitchLogo();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 54,
-      height: 54,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Color(0xFFBB86FC), Color(0xFF6A00FF)],
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0xFFBB86FC).withOpacity(0.25),
-            blurRadius: 18,
-            offset: const Offset(0, 12),
-          )
-        ],
-      ),
-      child: Center(
-        child: Text(
-          'F',
-          style: TextStyle(
-            fontWeight: FontWeight.w900,
-            fontSize: 22,
-            color: Colors.white.withOpacity(0.95),
-            fontFamily: 'monospace',
-          ),
-        ),
-      ),
-    );
-  }
+class _TabData {
+  const _TabData({required this.id, required this.url});
+  final String id;
+  final String url;
+  _TabData copyWith({String? id, String? url}) => _TabData(id: id ?? this.id, url: url ?? this.url);
 }
 

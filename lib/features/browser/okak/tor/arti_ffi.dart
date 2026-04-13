@@ -1,6 +1,8 @@
 import 'dart:ffi';
 import 'dart:io';
 
+import 'package:ffi/ffi.dart';
+
 /// Minimal FFI bridge to rust_core (Arti).
 ///
 /// This file is intentionally defensive: the app must compile and run
@@ -62,6 +64,43 @@ class ArtiFfi {
     try {
       final fn = _lib.lookupFunction<Uint8 Function(), int Function()>('arti_bootstrap');
       return fn() != 0;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Optional rust symbol: `tor_mode_direct() -> u8`
+  bool? trySetTorModeDirect() {
+    try {
+      final fn = _lib.lookupFunction<Uint8 Function(), int Function()>('tor_mode_direct');
+      return fn() != 0;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Optional rust symbol: `tor_mode_snowflake() -> u8`
+  bool? trySetTorModeSnowflake() {
+    try {
+      final fn = _lib.lookupFunction<Uint8 Function(), int Function()>('tor_mode_snowflake');
+      return fn() != 0;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Optional rust symbol: `tor_mode_bridges_obfs4(const char*) -> u8`
+  bool? trySetTorModeBridgesObfs4(String lines) {
+    try {
+      final fn = _lib.lookupFunction<Uint8 Function(Pointer<Utf8>), int Function(Pointer<Utf8>)>(
+        'tor_mode_bridges_obfs4',
+      );
+      final ptr = lines.toNativeUtf8();
+      try {
+        return fn(ptr) != 0;
+      } finally {
+        malloc.free(ptr);
+      }
     } catch (_) {
       return null;
     }

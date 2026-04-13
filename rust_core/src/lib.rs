@@ -40,27 +40,27 @@ pub extern "C" fn arti_bootstrap() -> u8 {
 
         rt.block_on(async {
             let cfg = TorClientConfig::default();
-            
-            // Прямое создание клиента без лишних async-блоков
             let builder = TorClient::builder().config(cfg);
             
+            // Шаг 1: Создаем unbootstrapped клиент
             let unbootstrapped = match builder.create_unbootstrapped() {
                 Ok(c) => c,
                 Err(_) => {
                     TOR_STATE.store(0, Ordering::SeqCst);
-                    return;
+                    return; // Возвращает (), компилятор доволен
                 }
             };
 
-            // Явно указываем тип для bootstrapped клиента
-            let final_client: TorClient<PreferredRuntime> = match unbootstrapped.bootstrap().await {
+            // Шаг 2: Запускаем bootstrap
+            let final_client = match unbootstrapped.bootstrap().await {
                 Ok(c) => c,
                 Err(_) => {
                     TOR_STATE.store(0, Ordering::SeqCst);
-                    return;
+                    return; // Возвращает (), типы совпадают
                 }
             };
 
+            // Шаг 3: Настраиваем прокси-сервер
             let listener = match TcpListener::bind("127.0.0.1:9050").await {
                 Ok(l) => l,
                 Err(_) => {
@@ -99,7 +99,6 @@ pub extern "C" fn is_tor_ready() -> u8 {
 }
 
 async fn handle_socks5(mut sock: TcpStream, tor: TorClient<PreferredRuntime>) -> std::io::Result<()> {
-    // Начало SOCKS5
     let mut header = [0u8; 2];
     sock.read_exact(&mut header).await?;
     if header[0] != 0x05 { return Ok(()); }
@@ -114,29 +113,28 @@ async fn handle_socks5(mut sock: TcpStream, tor: TorClient<PreferredRuntime>) ->
     }
     sock.write_all(&[0x05, 0x00]).await?;
 
-    // Чтение команды
     let mut cmd_head = [0u8; 4];
     sock.read_exact(&mut cmd_head).await?;
-    if cmd_head[1] != 0x01 { // Только CONNECT
+    if cmd_head[1] != 0x01 { 
         reply_socks5(&mut sock, 0x07, SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), 0)).await?;
         return Ok(());
     }
 
     let (host, port) = match cmd_head[3] {
-        0x01 => { // IPv4
+        0x01 => {
             let mut b = [0u8; 4];
             sock.read_exact(&mut b).await?;
             let p = sock.read_u16().await?;
             (IpAddr::V4(Ipv4Addr::from(b)).to_string(), p)
         }
-        0x03 => { // Domain
+        0x03 => {
             let len = sock.read_u8().await? as usize;
             let mut b = vec![0u8; len];
             sock.read_exact(&mut b).await?;
             let p = sock.read_u16().await?;
             (String::from_utf8_lossy(&b).to_string(), p)
         }
-        0x04 => { // IPv6
+        0x04 => {
             let mut b = [0u8; 16];
             sock.read_exact(&mut b).await?;
             let p = sock.read_u16().await?;
@@ -145,7 +143,6 @@ async fn handle_socks5(mut sock: TcpStream, tor: TorClient<PreferredRuntime>) ->
         _ => return Ok(()),
     };
 
-    // Коннект через Tor
     match tor.connect((host, port)).await {
         Ok(tor_stream) => {
             reply_socks5(&mut sock, 0x00, SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), 0)).await?;

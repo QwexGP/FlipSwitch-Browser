@@ -49,9 +49,9 @@ pub extern "C" fn arti_bootstrap() -> u8 {
         rt.block_on(async {
             // Create and bootstrap Tor client.
             let cfg = TorClientConfig::default();
-            let builder = TorClient::builder_from_config(cfg);
+            let builder = TorClient::builder().config(cfg);
 
-            let client = match builder.create_unbootstrapped().await {
+            let client: TorClient<PreferredRuntime> = match builder.create_unbootstrapped().await {
                 Ok(c) => c,
                 Err(_) => {
                     TOR_STATE.store(0, Ordering::SeqCst);
@@ -59,7 +59,7 @@ pub extern "C" fn arti_bootstrap() -> u8 {
                 }
             };
 
-            let client = match client.bootstrap().await {
+            let client: TorClient<PreferredRuntime> = match client.bootstrap().await {
                 Ok(c) => c,
                 Err(_) => {
                     TOR_STATE.store(0, Ordering::SeqCst);
@@ -186,7 +186,7 @@ async fn handle_socks5(mut sock: TcpStream, tor: TorClient<PreferredRuntime>) ->
             }
         }
     } else if let Some(ip) = ip_addr_opt {
-        match tor.connect((ip, port)).await {
+        match tor.connect((ip.to_string(), port)).await {
             Ok(s) => s,
             Err(_) => {
                 reply_socks5(&mut sock, 0x05, SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), 0)).await?;

@@ -8,14 +8,11 @@ use tor_rtcompat::PreferredRuntime;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 
-/// 0 = not running, 1 = connecting, 2 = ready.
 static TOR_STATE: AtomicU8 = AtomicU8::new(0);
-
 static RUNTIME: OnceLock<tokio::runtime::Runtime> = OnceLock::new();
 
 #[no_mangle]
 pub extern "C" fn arti_bootstrap() -> u8 {
-    // Гарантируем, что запуск произойдет только один раз
     let prev = TOR_STATE.compare_exchange(0, 1, Ordering::SeqCst, Ordering::SeqCst);
     if prev.is_err() {
         return 1;
@@ -46,11 +43,15 @@ pub extern "C" fn arti_bootstrap() -> u8 {
         rt.block_on(async {
             let cfg = TorClientConfig::default();
             
-            // 1. Инициализируем строителя
-            let builder = TorClient::builder().config(cfg);
-            
-            // 2. Создаем unbootstrapped клиент
-            let unbootstrapped = match builder.create_unbootstrapped() {
+            // СОЗДАЕМ КЛИЕНТ В ОДНУ ЦЕПОЧКУ
+            let client_res = async {
+                let builder = TorClient::builder().config(cfg);
+                let unbootstrapped = builder.create_unbootstrapped()?;
+                let bootstrapped = unbootstrapped.bootstrap().await?;
+                Ok::<TorClient<PreferredRuntime>, anyhow::Error>(bootstrapped)
+            }.await;
+
+            let final_client = match client_res {
                 Ok(c) => c,
                 Err(_) => {
                     TOR_STATE.store(0, Ordering::SeqCst);
@@ -58,16 +59,6 @@ pub extern "C" fn arti_bootstrap() -> u8 {
                 }
             };
 
-            // 3. Запускаем bootstrap и получаем ФИНАЛЬНЫЙ клиент
-            let final_client = match unbootstrapped.bootstrap().await {
-                Ok(c) => c,
-                Err(_) => {
-                    TOR_STATE.store(0, Ordering::SeqCst);
-                    return;
-                }
-            };
-
-            // 4. Поднимаем локальный листенер для SOCKS5
             let listener = match TcpListener::bind("127.0.0.1:9050").await {
                 Ok(l) => l,
                 Err(_) => {
@@ -78,7 +69,6 @@ pub extern "C" fn arti_bootstrap() -> u8 {
 
             TOR_STATE.store(2, Ordering::SeqCst);
 
-            // 5. Цикл обработки входящих соединений
             loop {
                 let (sock, _) = match listener.accept().await {
                     Ok(v) => v,
@@ -107,7 +97,6 @@ pub extern "C" fn is_tor_ready() -> u8 {
 }
 
 async fn handle_socks5(mut sock: TcpStream, tor: TorClient<PreferredRuntime>) -> std::io::Result<()> {
-    // Примитивное приветствие SOCKS5
     let ver = sock.read_u8().await?;
     if ver != 0x05 { return Ok(()); }
     let nmethods = sock.read_u8().await? as usize;
@@ -120,7 +109,6 @@ async fn handle_socks5(mut sock: TcpStream, tor: TorClient<PreferredRuntime>) ->
     }
     sock.write_all(&[0x05, 0x00]).await?;
 
-    // Чтение запроса
     let req_ver = sock.read_u8().await?;
     if req_ver != 0x05 { return Ok(()); }
     let cmd = sock.read_u8().await?;
@@ -157,7 +145,6 @@ async fn handle_socks5(mut sock: TcpStream, tor: TorClient<PreferredRuntime>) ->
 
     let port = sock.read_u16().await?;
 
-    // Подключаемся через Tor
     let tor_stream = if let Some(host) = host {
         match tor.connect((host.as_str(), port)).await {
             Ok(s) => s,
@@ -179,7 +166,6 @@ async fn handle_socks5(mut sock: TcpStream, tor: TorClient<PreferredRuntime>) ->
         return Ok(());
     };
 
-    // Ответ об успешном соединении и проброс трафика
     reply_socks5(&mut sock, 0x00, SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), 0)).await?;
     let (mut a, mut b) = (sock, tor_stream);
     let _ = tokio::io::copy_bidirectional(&mut a, &mut b).await;

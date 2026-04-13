@@ -41,15 +41,21 @@ pub extern "C" fn arti_bootstrap() -> u8 {
         rt.block_on(async {
             let cfg = TorClientConfig::default();
             
-            // Пытаемся создать и запустить клиент Tor
-            let client_res = async {
-                let unbootstrapped = TorClient::builder().config(cfg).create_unbootstrapped()?;
-                let bootstrapped = unbootstrapped.bootstrap().await?;
-                Ok::<TorClient<PreferredRuntime>, arti_client::Error>(bootstrapped)
+            // 1. Создаем unbootstrapped клиент
+            let client_setup = async {
+                let client = TorClient::builder()
+                    .config(cfg)
+                    .create_unbootstrapped()?;
+                
+                // 2. Запускаем процесс bootstrap
+                client.bootstrap().await?;
+                
+                // Возвращаем сам клиент
+                Ok::<TorClient<PreferredRuntime>, arti_client::Error>(client)
             }.await;
 
-            if let Ok(final_client) = client_res {
-                // Пытаемся запустить TCP Listener для SOCKS5
+            if let Ok(final_client) = client_setup {
+                // 3. Запускаем прокси-сервер
                 if let Ok(listener) = TcpListener::bind("127.0.0.1:9050").await {
                     TOR_STATE.store(2, Ordering::SeqCst);
 

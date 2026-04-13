@@ -15,7 +15,6 @@ static RUNTIME: OnceLock<tokio::runtime::Runtime> = OnceLock::new();
 
 #[no_mangle]
 pub extern "C" fn arti_bootstrap() -> u8 {
-    // Start only once.
     let prev = TOR_STATE.compare_exchange(0, 1, Ordering::SeqCst, Ordering::SeqCst);
     if prev.is_err() {
         return 1;
@@ -47,8 +46,8 @@ pub extern "C" fn arti_bootstrap() -> u8 {
             let cfg = TorClientConfig::default();
             let builder = TorClient::builder().config(cfg);
 
-            // ИСПРАВЛЕНИЕ: Убрали явный тип TorClient<PreferredRuntime>
-            let client = match builder.create_unbootstrapped() {
+            // 1. Создаем unbootstrapped клиент без указания типа
+            let unbootstrapped = match builder.create_unbootstrapped() {
                 Ok(c) => c,
                 Err(_) => {
                     TOR_STATE.store(0, Ordering::SeqCst);
@@ -56,8 +55,8 @@ pub extern "C" fn arti_bootstrap() -> u8 {
                 }
             };
 
-            // ИСПРАВЛЕНИЕ: Убрали явный тип TorClient<PreferredRuntime>
-            let client = match client.bootstrap().await {
+            // 2. Получаем готовый клиент (тип выведется автоматически)
+            let client = match unbootstrapped.bootstrap().await {
                 Ok(c) => c,
                 Err(_) => {
                     TOR_STATE.store(0, Ordering::SeqCst);
@@ -80,9 +79,11 @@ pub extern "C" fn arti_bootstrap() -> u8 {
                     Ok(v) => v,
                     Err(_) => continue,
                 };
-                let client = client.clone();
+                
+                // Клонируем клиент для каждого нового соединения
+                let client_clone = client.clone();
                 tokio::spawn(async move {
-                    let _ = handle_socks5(sock, client).await;
+                    let _ = handle_socks5(sock, client_clone).await;
                 });
             }
         });
@@ -101,7 +102,6 @@ pub extern "C" fn is_tor_ready() -> u8 {
     arti_is_ready()
 }
 
-// В аргументах функции тип оставить можно, так как он там уместен
 async fn handle_socks5(mut sock: TcpStream, tor: TorClient<PreferredRuntime>) -> std::io::Result<()> {
     let ver = sock.read_u8().await?;
     if ver != 0x05 { return Ok(()); }

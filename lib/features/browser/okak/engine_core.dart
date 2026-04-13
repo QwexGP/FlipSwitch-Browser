@@ -14,9 +14,8 @@ import '../../../services/tor_bridge_service.dart';
 import 'injections/fingerprint_modules.dart';
 import 'proxy_handler.dart';
 
-/// Core browser engine (WebView + network + modular injections).
-class OkakEngineCore extends StatefulWidget {
-  const OkakEngineCore({
+class FlipEngine extends StatefulWidget {
+  const FlipEngine({
     super.key,
     required this.initialUrl,
     required this.onTitleChanged,
@@ -28,10 +27,10 @@ class OkakEngineCore extends StatefulWidget {
   final ValueChanged<InAppWebViewController?> onControllerReady;
 
   @override
-  State<OkakEngineCore> createState() => _OkakEngineCoreState();
+  State<FlipEngine> createState() => _FlipEngineState();
 }
 
-class _OkakEngineCoreState extends State<OkakEngineCore> {
+class _FlipEngineState extends State<FlipEngine> {
   InAppWebViewController? _controller;
   final Completer<void> _ready = Completer<void>();
 
@@ -63,7 +62,6 @@ class _OkakEngineCoreState extends State<OkakEngineCore> {
   Future<ProfileModel> _resolveProfile(SettingsModel s) async {
     final box = _profilesBox ?? await ProfileManager.openProfilesBox();
 
-    // Map UA families to our built-in presets (keep stable for now).
     final id = switch (s.uaFamily) {
       UaFamily.android => 'pixel9pro',
       UaFamily.ios => 'iphone16pro',
@@ -75,15 +73,12 @@ class _OkakEngineCoreState extends State<OkakEngineCore> {
   }
 
   Future<void> _applyAll(SettingsModel s, ProfileModel p) async {
-    // Apply proxy routing (Android only).
     await ProxyHandler.apply(s);
 
-    // Configure Tor bridges/snowflake via rust_core (best effort), then bootstrap.
     if (s.networkMode != NetworkMode.direct) {
       await TorBridgeService.instance.applyNetworkSettings(s);
     }
 
-    // Apply JS injections after controller is ready.
     if (!_ready.isCompleted) return;
     await _ready.future;
     final c = _controller;
@@ -115,7 +110,6 @@ class _OkakEngineCoreState extends State<OkakEngineCore> {
 
             final p = snap.data!;
 
-            // WebView settings (incognito when not direct).
             final incognito = s.networkMode != NetworkMode.direct;
             final wvSettings = InAppWebViewSettings(
               userAgent: p.userAgent,
@@ -127,11 +121,9 @@ class _OkakEngineCoreState extends State<OkakEngineCore> {
               mediaPlaybackRequiresUserGesture: false,
               incognito: incognito,
               cacheEnabled: !incognito,
-              // helps older GPUs/drivers; platform view still renders natively.
               hardwareAcceleration: false,
             );
 
-            // Apply changes eagerly.
             unawaited(_applyAll(s, p));
 
             return InAppWebView(
@@ -172,7 +164,6 @@ class _OkakEngineCoreState extends State<OkakEngineCore> {
   }
 }
 
-/// Panic button: clear storage and blank the tab.
 Future<void> panicClearAndCloseTab(InAppWebViewController? controller) async {
   try {
     await CookieManager.instance().deleteAllCookies();

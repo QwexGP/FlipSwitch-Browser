@@ -6,7 +6,7 @@ import '../../../data/models/settings_model.dart';
 import '../../../data/services/settings_manager.dart';
 import '../okak/engine_core.dart';
 import '../okak/tor/tor_status.dart';
-import '../../../ui/settings/settings_screen.dart';
+import 'settings_screen.dart';
 
 class BrowserHome extends StatefulWidget {
   const BrowserHome({super.key});
@@ -97,7 +97,7 @@ class _BrowserHomeState extends State<BrowserHome> {
                     onPressed: _openSettings,
                     icon: const Icon(Icons.menu),
                     color: Colors.white.withOpacity(0.92),
-                    tooltip: 'Settings',
+                    tooltip: 'Настройки',
                   ),
                 ],
               ),
@@ -105,12 +105,11 @@ class _BrowserHomeState extends State<BrowserHome> {
             Expanded(
               child: Stack(
                 children: [
-                  OkakEngineCore(
+                  FlipEngine(
                     initialUrl: currentUrl,
                     onTitleChanged: (t) => setState(() => title = t),
                     onControllerReady: (c) => controller = c,
                   ),
-                  // Minimalist center branding overlay (only on first load / blank).
                   IgnorePointer(
                     child: Align(
                       alignment: Alignment.topCenter,
@@ -130,6 +129,7 @@ class _BrowserHomeState extends State<BrowserHome> {
                                   fontWeight: FontWeight.w800,
                                   fontSize: 20,
                                   color: Colors.white.withOpacity(0.90),
+                                  fontFamily: 'monospace',
                                 ),
                               ),
                             ],
@@ -168,7 +168,7 @@ class _BrowserHomeState extends State<BrowserHome> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('Shield', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
+                  const Text('Щит', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16, fontFamily: 'monospace')),
                   const SizedBox(height: 10),
                   Row(
                     children: [
@@ -178,13 +178,13 @@ class _BrowserHomeState extends State<BrowserHome> {
                         decoration: BoxDecoration(color: color, shape: BoxShape.circle),
                       ),
                       const SizedBox(width: 10),
-                      Text(label, style: TextStyle(color: Colors.white.withOpacity(0.85))),
+                      Text(label, style: TextStyle(color: Colors.white.withOpacity(0.85), fontFamily: 'monospace')),
                     ],
                   ),
                   const SizedBox(height: 12),
                   Text(
-                    'Fingerprint controls are in Settings.',
-                    style: TextStyle(color: Colors.white.withOpacity(0.55)),
+                    'Управление отпечатком находится в настройках.',
+                    style: TextStyle(color: Colors.white.withOpacity(0.55), fontFamily: 'monospace'),
                   ),
                 ],
               );
@@ -213,7 +213,7 @@ class _ShieldButton extends StatelessWidget {
           color: Colors.white.withOpacity(0.06),
           border: Border.all(color: Colors.white.withOpacity(0.10)),
         ),
-        child: const Icon(Icons.shield_outlined, color: Color(0xFF1DA1F2)),
+        child: const Icon(Icons.shield_outlined, color: Color(0xFFBB86FC)),
       ),
     );
   }
@@ -247,12 +247,12 @@ class _GlassAddressBar extends StatelessWidget {
               keyboardType: TextInputType.url,
               textInputAction: TextInputAction.go,
               onSubmitted: (_) => onGo(),
-              style: const TextStyle(color: Colors.white),
+              style: const TextStyle(color: Colors.white, fontFamily: 'monospace'),
               decoration: InputDecoration(
                 isDense: true,
                 border: InputBorder.none,
-                hintText: 'Search or enter address',
-                hintStyle: TextStyle(color: Colors.white.withOpacity(0.45)),
+                hintText: 'Введите адрес или запрос',
+                hintStyle: TextStyle(color: Colors.white54, fontFamily: 'monospace'),
               ),
             ),
           ),
@@ -260,7 +260,7 @@ class _GlassAddressBar extends StatelessWidget {
             onPressed: onNewIdentity,
             icon: const Icon(Icons.autorenew),
             color: Colors.white.withOpacity(0.92),
-            tooltip: 'New Identity',
+            tooltip: 'Новая личность',
           ),
         ],
       ),
@@ -281,11 +281,11 @@ class _FlipSwitchLogo extends StatelessWidget {
         gradient: const LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [Color(0xFF1DA1F2), Color(0xFF6A00FF)],
+          colors: [Color(0xFFBB86FC), Color(0xFF6A00FF)],
         ),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF1DA1F2).withOpacity(0.25),
+            color: const Color(0xFFBB86FC).withOpacity(0.25),
             blurRadius: 18,
             offset: const Offset(0, 12),
           )
@@ -298,6 +298,7 @@ class _FlipSwitchLogo extends StatelessWidget {
             fontWeight: FontWeight.w900,
             fontSize: 22,
             color: Colors.white.withOpacity(0.95),
+            fontFamily: 'monospace',
           ),
         ),
       ),

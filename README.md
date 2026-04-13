@@ -1,17 +1,13 @@
-# br
+# FlipSwitch Browser
 
-A new Flutter project.
+Минималистичный приватный браузер на Flutter с Tor (Arti) и модульными антифингерпринт‑инъекциями.
 
-## Getting Started
+## Настройка сети
 
-This project is a starting point for a Flutter application.
+Если стандартное подключение заблокировано, используйте мосты Tor (obfs4).
 
-A few resources to get you started if this is your first Flutter project:
+Получить мосты можно официальными способами:
+- Через Telegram‑бота `@GetBridgesBot` (Tor Project)
+- Через сайт Tor Bridges: `https://bridges.torproject.org/options`
 
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
-
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+После получения вставьте строки мостов в поле ввода в разделе **Настройки → Подключение → Мосты Tor**.

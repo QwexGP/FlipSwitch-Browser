@@ -33,29 +33,45 @@ jobs:
           mkdir -p ios/libs
           cp rust_core/target/aarch64-apple-ios/release/librust_core.a ios/libs/librust_core.a
 
+      - name: Patch Xcode Project (Disable Signing)
+        # Этот шаг заменяет настройки подписи прямо в файле проекта на "не требуется"
+        run: |
+          sed -i '' 's/CODE_SIGN_STYLE = Automatic;/CODE_SIGN_STYLE = Manual;/g' ios/Runner.xcodeproj/project.pbxproj
+          sed -i '' 's/CODE_SIGN_IDENTITY = "iPhone Developer";/CODE_SIGN_IDENTITY = "";/g' ios/Runner.xcodeproj/project.pbxproj
+          sed -i '' 's/CODE_SIGNING_REQUIRED = YES;/CODE_SIGNING_REQUIRED = NO;/g' ios/Runner.xcodeproj/project.pbxproj
+          sed -i '' 's/CODE_SIGNING_ALLOWED = YES;/CODE_SIGNING_ALLOWED = NO;/g' ios/Runner.xcodeproj/project.pbxproj
+
       - name: Xcode Build (Manual Bypass)
         run: |
-          # Сначала готовим файлы проекта
+          # Готовим окружение
           flutter build ios --release --no-codesign --config-only
           
-          # Собираем напрямую через Xcode, игнорируя подпись
+          # Чистим и собираем через xcodebuild
           xcodebuild -workspace ios/Runner.xcworkspace \
             -scheme Runner \
             -configuration Release \
             -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
             AD_HOC_CODE_SIGNING_ALLOWED=YES \
-            build
+            clean build
 
       - name: Package IPA (unsigned)
         run: |
-          APP_PATH=$(find build/ios/iphoneos -name "*.app" | head -n 1)
+          # Ищем .app в папке DerivedData или стандартной build
+          APP_PATH=$(find ~/Library/Developer/Xcode/DerivedData -name "Runner.app" -type d | head -n 1)
           if [ -z "$APP_PATH" ]; then
-            echo "Ошибка: .app файл не найден!"
+            APP_PATH=$(find build/ios/iphoneos -name "*.app" -type d | head -n 1)
+          fi
+          
+          if [ -z "$APP_PATH" ]; then
+            echo "Ошибка: .app не найден ни в DerivedData, ни в build."
             exit 1
           fi
+          
+          echo "Found app at: $APP_PATH"
           mkdir -p Payload
           cp -R "$APP_PATH" Payload/
           zip -r FlipSwitch.ipa Payload
